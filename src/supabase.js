@@ -18,7 +18,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 export const TABLES = {
   USERS: 'users',
   CLOTHES: 'clothes',
-  RECOMMENDATIONS: 'recommendations'
+  RECOMMENDATIONS: 'recommendations',
+  CART: 'cart',
+  FAVORITES: 'favorites',
+  PROFILES: 'profiles'
 }
 
 // 用户相关操作
@@ -126,6 +129,139 @@ export const recommendationApi = {
         clothes (*)
       `)
       .limit(limit)
+    return { data, error }
+  }
+}
+
+// 购物车相关操作
+export const cartApi = {
+  // 获取用户的购物车
+  async getUserCart(userId) {
+    const { data, error } = await supabase
+      .from(TABLES.CART)
+      .select(`
+        *,
+        clothes (*)
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+    return { data, error }
+  },
+
+  // 添加商品到购物车
+  async addToCart(userId, clothId, size, color, quantity = 1) {
+    const { data, error } = await supabase
+      .from(TABLES.CART)
+      .upsert({
+        user_id: userId,
+        cloth_id: clothId,
+        size: size,
+        color: color,
+        quantity: quantity
+      }, {
+        onConflict: 'user_id,cloth_id,size,color'
+      })
+    return { data, error }
+  },
+
+  // 更新购物车商品数量
+  async updateCartItem(userId, cartItemId, quantity) {
+    const { data, error } = await supabase
+      .from(TABLES.CART)
+      .update({ quantity })
+      .eq('id', cartItemId)
+      .eq('user_id', userId)
+    return { data, error }
+  },
+
+  // 删除购物车商品
+  async removeFromCart(userId, cartItemId) {
+    const { data, error } = await supabase
+      .from(TABLES.CART)
+      .delete()
+      .eq('id', cartItemId)
+      .eq('user_id', userId)
+    return { data, error }
+  },
+
+  // 清空购物车
+  async clearCart(userId) {
+    const { data, error } = await supabase
+      .from(TABLES.CART)
+      .delete()
+      .eq('user_id', userId)
+    return { data, error }
+  }
+}
+
+// 收藏相关操作
+export const favoritesApi = {
+  // 获取用户的收藏
+  async getUserFavorites(userId) {
+    const { data, error } = await supabase
+      .from(TABLES.FAVORITES)
+      .select(`
+        *,
+        clothes (*)
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+    return { data, error }
+  },
+
+  // 添加收藏
+  async addToFavorites(userId, clothId) {
+    const { data, error } = await supabase
+      .from(TABLES.FAVORITES)
+      .insert({
+        user_id: userId,
+        cloth_id: clothId
+      })
+    return { data, error }
+  },
+
+  // 检查是否已收藏
+  async isFavorite(userId, clothId) {
+    const { data, error } = await supabase
+      .from(TABLES.FAVORITES)
+      .select('id')
+      .eq('user_id', userId)
+      .eq('cloth_id', clothId)
+      .single()
+    return { data, error }
+  },
+
+  // 取消收藏
+  async removeFromFavorites(userId, clothId) {
+    const { data, error } = await supabase
+      .from(TABLES.FAVORITES)
+      .delete()
+      .eq('user_id', userId)
+      .eq('cloth_id', clothId)
+    return { data, error }
+  }
+}
+
+// 用户信息相关操作
+export const profileApi = {
+  // 获取用户档案
+  async getProfile(userId) {
+    const { data, error } = await supabase
+      .from(TABLES.PROFILES)
+      .select('*')
+      .eq('id', userId)
+      .single()
+    return { data, error }
+  },
+
+  // 更新用户档案
+  async updateProfile(userId, profileData) {
+    const { data, error } = await supabase
+      .from(TABLES.PROFILES)
+      .upsert({
+        id: userId,
+        ...profileData
+      })
     return { data, error }
   }
 }

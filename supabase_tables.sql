@@ -38,17 +38,45 @@ CREATE TABLE IF NOT EXISTS profiles (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
+-- 4. 购物车表 (cart)
+CREATE TABLE IF NOT EXISTS cart (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    cloth_id UUID NOT NULL REFERENCES clothes(id) ON DELETE CASCADE,
+    size VARCHAR(20),
+    color VARCHAR(50),
+    quantity INTEGER DEFAULT 1 CHECK (quantity > 0),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+    UNIQUE(user_id, cloth_id, size, color) -- 防止重复商品
+);
+
+-- 5. 收藏表 (favorites)
+CREATE TABLE IF NOT EXISTS favorites (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    cloth_id UUID NOT NULL REFERENCES clothes(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+    UNIQUE(user_id, cloth_id) -- 防止重复收藏
+);
+
 -- 创建索引以提高查询性能
 CREATE INDEX IF NOT EXISTS idx_clothes_category ON clothes(category);
 CREATE INDEX IF NOT EXISTS idx_clothes_created_at ON clothes(created_at);
 CREATE INDEX IF NOT EXISTS idx_recommendations_user_id ON recommendations(user_id);
 CREATE INDEX IF NOT EXISTS idx_recommendations_cloth_id ON recommendations(cloth_id);
 CREATE INDEX IF NOT EXISTS idx_recommendations_viewed_at ON recommendations(viewed_at);
+CREATE INDEX IF NOT EXISTS idx_cart_user_id ON cart(user_id);
+CREATE INDEX IF NOT EXISTS idx_cart_cloth_id ON cart(cloth_id);
+CREATE INDEX IF NOT EXISTS idx_favorites_user_id ON favorites(user_id);
+CREATE INDEX IF NOT EXISTS idx_favorites_cloth_id ON favorites(cloth_id);
 
 -- 启用行级安全策略 (RLS)
 ALTER TABLE clothes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recommendations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cart ENABLE ROW LEVEL SECURITY;
+ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
 
 -- 设置 RLS 策略
 -- 服装表：所有人可读
@@ -63,6 +91,17 @@ CREATE POLICY "用户只能查看自己的信息" ON profiles FOR SELECT USING (
 CREATE POLICY "用户可以插入自己的信息" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "用户可以更新自己的信息" ON profiles FOR UPDATE USING (auth.uid() = id);
 
+-- 购物车表：用户只能查看和操作自己的购物车
+CREATE POLICY "用户只能查看自己的购物车" ON cart FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "用户可以插入自己的购物车项目" ON cart FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "用户可以更新自己的购物车项目" ON cart FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "用户可以删除自己的购物车项目" ON cart FOR DELETE USING (auth.uid() = user_id);
+
+-- 收藏表：用户只能查看和操作自己的收藏
+CREATE POLICY "用户只能查看自己的收藏" ON favorites FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "用户可以插入自己的收藏项目" ON favorites FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "用户可以删除自己的收藏项目" ON favorites FOR DELETE USING (auth.uid() = user_id);
+
 -- 创建触发器来更新时间戳
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -76,6 +115,9 @@ CREATE TRIGGER update_clothes_updated_at BEFORE UPDATE ON clothes
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_cart_updated_at BEFORE UPDATE ON cart
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- 插入示例数据

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { clothesApi, recommendationApi, userApi } from '../supabase'
+import { clothesApi, recommendationApi, userApi, cartApi, favoritesApi } from '../supabase'
 
 const ClothDetail = ({ user }) => {
   const { id } = useParams()
@@ -10,12 +10,29 @@ const ClothDetail = ({ user }) => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [recommendationAdded, setRecommendationAdded] = useState(false)
+  
+  // 新增状态
+  const [selectedSize, setSelectedSize] = useState('')
+  const [selectedColor, setSelectedColor] = useState('')
+  const [isFavorite, setIsFavorite] = useState(false)
+  const [message, setMessage] = useState('')
+  const [messageType, setMessageType] = useState('') // success, error, info
 
   useEffect(() => {
     if (id) {
       loadClothDetail()
     }
-  }, [id])
+  }, [id, user])
+
+  // 显示消息
+  const showMessage = (text, type = 'success') => {
+    setMessage(text)
+    setMessageType(type)
+    setTimeout(() => {
+      setMessage('')
+      setMessageType('')
+    }, 3000)
+  }
 
   const loadClothDetail = async () => {
     try {
@@ -32,18 +49,34 @@ const ClothDetail = ({ user }) => {
 
       setCloth(clothData)
 
+      // 设置默认选择第一个尺寸和颜色
+      if (clothData.sizes) {
+        const sizes = clothData.sizes.split(',')
+        setSelectedSize(sizes[0]?.trim())
+      }
+      if (clothData.colors) {
+        const colors = clothData.colors.split(',')
+        setSelectedColor(colors[0]?.trim())
+      }
+
       // 加载相似服装
       const { data: similarData } = await clothesApi.getClothesByCategory(clothData.category)
       setSimilarClothes((similarData || []).filter(item => item.id !== id).slice(0, 3))
 
-      // 如果用户已登录，记录推荐
-      if (user && !recommendationAdded) {
-        await recommendationApi.addRecommendation(
-          user.id, 
-          id, 
-          '用户查看详情'
-        )
-        setRecommendationAdded(true)
+      // 检查是否已收藏
+      if (user) {
+        const { data: favoriteData } = await favoritesApi.isFavorite(user.id, id)
+        setIsFavorite(!!favoriteData)
+
+        // 记录推荐
+        if (!recommendationAdded) {
+          await recommendationApi.addRecommendation(
+            user.id, 
+            id, 
+            '用户查看详情'
+          )
+          setRecommendationAdded(true)
+        }
       }
 
     } catch (err) {
@@ -71,6 +104,60 @@ const ClothDetail = ({ user }) => {
       case 'kids': return '童装'
       case 'accessories': return '配饰'
       default: return '服装'
+    }
+  }
+
+  // 添加到购物车
+  const handleAddToCart = async () => {
+    if (!user) {
+      showMessage('请先登录后再添加到购物车', 'error')
+      return
+    }
+
+    if (!selectedSize || !selectedColor) {
+      showMessage('请选择尺寸和颜色', 'error')
+      return
+    }
+
+    try {
+      const { error } = await cartApi.addToCart(
+        user.id,
+        cloth.id,
+        selectedSize,
+        selectedColor,
+        1
+      )
+
+      if (error) throw error
+      showMessage('已添加到购物车', 'success')
+    } catch (err) {
+      showMessage('添加失败，请重试', 'error')
+      console.error('添加购物车失败:', err)
+    }
+  }
+
+  // 切换收藏状态
+  const toggleFavorite = async () => {
+    if (!user) {
+      showMessage('请先登录后再收藏', 'error')
+      return
+    }
+
+    try {
+      if (isFavorite) {
+        const { error } = await favoritesApi.removeFromFavorites(user.id, cloth.id)
+        if (error) throw error
+        setIsFavorite(false)
+        showMessage('已取消收藏', 'info')
+      } else {
+        const { error } = await favoritesApi.addToFavorites(user.id, cloth.id)
+        if (error) throw error
+        setIsFavorite(true)
+        showMessage('已添加到收藏', 'success')
+      }
+    } catch (err) {
+      showMessage('操作失败，请重试', 'error')
+      console.error('收藏操作失败:', err)
     }
   }
 
@@ -108,6 +195,26 @@ const ClothDetail = ({ user }) => {
 
   return (
     <div className="container">
+      {/* 消息提示 */}
+      {message && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: '1000',
+          padding: '16px 24px',
+          borderRadius: '8px',
+          fontWeight: '500',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          background: messageType === 'success' ? '#10b981' : 
+                      messageType === 'error' ? '#ef4444' : '#3b82f6',
+          color: 'white',
+          animation: 'slideIn 0.3s ease-out'
+        }}>
+          {message}
+        </div>
+      )}
+
       {/* 返回按钮 */}
       <button 
         onClick={() => navigate(-1)}
@@ -203,7 +310,7 @@ const ClothDetail = ({ user }) => {
             {cloth.description}
           </p>
 
-          {/* 尺寸信息 */}
+          {/* 尺寸选择 */}
           {cloth.sizes && (
             <div style={{ marginBottom: '24px' }}>
               <h3 style={{
@@ -212,7 +319,7 @@ const ClothDetail = ({ user }) => {
                 marginBottom: '12px',
                 color: '#1e293b'
               }}>
-                可选尺寸
+                选择尺寸 <span style={{ color: '#ef4444', fontSize: '14px' }}>*</span>
               </h3>
               <div style={{
                 display: 'flex',
@@ -220,22 +327,39 @@ const ClothDetail = ({ user }) => {
                 flexWrap: 'wrap'
               }}>
                 {cloth.sizes.split(',').map(size => (
-                  <span key={size} style={{
-                    border: '2px solid #e2e8f0',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#475569'
-                  }}>
+                  <button
+                    key={size}
+                    onClick={() => setSelectedSize(size.trim())}
+                    style={{
+                      border: selectedSize === size.trim() ? '2px solid #667eea' : '2px solid #e2e8f0',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      color: selectedSize === size.trim() ? '#667eea' : '#475569',
+                      background: selectedSize === size.trim() ? '#f0f4ff' : '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedSize !== size.trim()) {
+                        e.target.style.background = '#f8fafc'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedSize !== size.trim()) {
+                        e.target.style.background = '#ffffff'
+                      }
+                    }}
+                  >
                     {size.trim()}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* 颜色信息 */}
+          {/* 颜色选择 */}
           {cloth.colors && (
             <div style={{ marginBottom: '32px' }}>
               <h3 style={{
@@ -244,7 +368,7 @@ const ClothDetail = ({ user }) => {
                 marginBottom: '12px',
                 color: '#1e293b'
               }}>
-                可选颜色
+                选择颜色 <span style={{ color: '#ef4444', fontSize: '14px' }}>*</span>
               </h3>
               <div style={{
                 display: 'flex',
@@ -252,17 +376,48 @@ const ClothDetail = ({ user }) => {
                 flexWrap: 'wrap'
               }}>
                 {cloth.colors.split(',').map(color => (
-                  <span key={color} style={{
-                    background: '#f1f5f9',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#475569'
-                  }}>
+                  <button
+                    key={color}
+                    onClick={() => setSelectedColor(color.trim())}
+                    style={{
+                      border: selectedColor === color.trim() ? '2px solid #667eea' : '2px solid #e2e8f0',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      color: selectedColor === color.trim() ? '#667eea' : '#475569',
+                      background: selectedColor === color.trim() ? '#f0f4ff' : '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedColor !== color.trim()) {
+                        e.target.style.background = '#f8fafc'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedColor !== color.trim()) {
+                        e.target.style.background = '#ffffff'
+                      }
+                    }}
+                  >
                     {color.trim()}
-                  </span>
+                  </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* 选择状态显示 */}
+          {(cloth.sizes || cloth.colors) && (
+            <div style={{ marginBottom: '24px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px' }}>
+              <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>当前选择：</div>
+              <div style={{ fontSize: '16px', color: '#1e293b', fontWeight: '500' }}>
+                {selectedSize && `尺寸：${selectedSize}`}
+                {selectedSize && selectedColor && ' | '}
+                {selectedColor && `颜色：${selectedColor}`}
+                {(!selectedSize && cloth.sizes) && '请选择尺寸'}
+                {(!selectedColor && cloth.colors) && '请选择颜色'}
               </div>
             </div>
           )}
@@ -273,11 +428,20 @@ const ClothDetail = ({ user }) => {
             gap: '16px',
             flexWrap: 'wrap'
           }}>
-            <button className="btn btn-primary" style={{ flex: 1 }}>
+            <button 
+              className="btn btn-primary" 
+              style={{ flex: 1 }}
+              onClick={handleAddToCart}
+              disabled={!selectedSize || !selectedColor}
+            >
               🛒 加入购物车
             </button>
-            <button className="btn btn-secondary" style={{ flex: 1 }}>
-              ❤️ 收藏
+            <button 
+              className={`btn ${isFavorite ? 'btn-danger' : 'btn-secondary'}`} 
+              style={{ flex: 1 }}
+              onClick={toggleFavorite}
+            >
+              {isFavorite ? '❤️ 已收藏' : '🤍 收藏'}
             </button>
           </div>
 
