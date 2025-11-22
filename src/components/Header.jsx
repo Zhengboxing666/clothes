@@ -1,7 +1,31 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { cartApi, favoritesApi } from '../supabase'
 
 const Header = ({ user, onLogout }) => {
+  const [cartCount, setCartCount] = useState(0)
+  const [favoritesCount, setFavoritesCount] = useState(0)
+
+  useEffect(() => {
+    if (user) {
+      loadCounts()
+    }
+  }, [user])
+
+  const loadCounts = async () => {
+    try {
+      // 获取购物车数量
+      const { data: cartData } = await cartApi.getUserCart(user.id)
+      const cartItemCount = cartData?.reduce((total, item) => total + item.quantity, 0) || 0
+      setCartCount(cartItemCount)
+
+      // 获取收藏数量
+      const { data: favoritesData } = await favoritesApi.getUserFavorites(user.id)
+      setFavoritesCount(favoritesData?.length || 0)
+    } catch (error) {
+      console.error('获取购物车和收藏数量失败:', error)
+    }
+  }
   return (
     <header style={{
       background: 'rgba(255, 255, 255, 0.95)',
@@ -49,6 +73,73 @@ const Header = ({ user, onLogout }) => {
                   首页
                 </Link>
               </li>
+              
+              {/* 购物车和收藏图标 */}
+              {user && (
+                <>
+                  <li style={{ position: 'relative' }}>
+                    <Link to="/cart" style={{
+                      textDecoration: 'none',
+                      color: '#475569',
+                      fontWeight: '500',
+                      transition: 'color 0.3s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }} onMouseOver={(e) => e.target.style.color = '#667eea'} 
+                       onMouseOut={(e) => e.target.style.color = '#475569'}>
+                      🛒 购物车
+                      {cartCount > 0 && (
+                        <span style={{
+                          background: '#ef4444',
+                          color: 'white',
+                          borderRadius: '50%',
+                          width: '20px',
+                          height: '20px',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: '700'
+                        }}>
+                          {cartCount}
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                  
+                  <li style={{ position: 'relative' }}>
+                    <Link to="/favorites" style={{
+                      textDecoration: 'none',
+                      color: '#475569',
+                      fontWeight: '500',
+                      transition: 'color 0.3s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }} onMouseOver={(e) => e.target.style.color = '#667eea'} 
+                       onMouseOut={(e) => e.target.style.color = '#475569'}>
+                      ❤️ 收藏
+                      {favoritesCount > 0 && (
+                        <span style={{
+                          background: '#ef4444',
+                          color: 'white',
+                          borderRadius: '50%',
+                          width: '20px',
+                          height: '20px',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: '700'
+                        }}>
+                          {favoritesCount}
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                </>
+              )}
               
               {user ? (
                 <>

@@ -4,6 +4,8 @@ import Header from './components/Header'
 import Home from './pages/Home'
 import ClothDetail from './pages/ClothDetail'
 import Profile from './pages/Profile'
+import Cart from './pages/Cart'
+import Favorites from './pages/Favorites'
 import { userApi } from './supabase'
 import './App.css'
 
@@ -52,6 +54,8 @@ function App() {
             <Route path="/" element={<Home user={user} />} />
             <Route path="/cloth/:id" element={<ClothDetail user={user} />} />
             <Route path="/profile" element={<Profile user={user} onLogin={handleLogin} />} />
+            <Route path="/cart" element={<Cart user={user} />} />
+            <Route path="/favorites" element={<Favorites user={user} />} />
           </Routes>
         </main>
       </div>
