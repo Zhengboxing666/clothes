@@ -317,7 +317,7 @@ const Cart = ({ user }) => {
                   <span style={{ color: '#64748b' }}>运费</span>
                   <span>免运费</span>
                 </div>
-                <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '16px 0' />
+                <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '16px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: '700' }}>
                   <span>总计</span>
                   <span style={{ color: '#667eea' }}>¥{getTotalPrice().toFixed(2)}</span>
